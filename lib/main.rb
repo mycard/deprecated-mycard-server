@@ -49,27 +49,20 @@ module MycardSever
       data = obj[:data]
       case obj[:header]
       when :login
-      	  conn = self
+        conn = self
         $log.info "login #{data[:name]}"
-        http = EventMachine::HttpRequest.new('http://card.touhou.cc/login.json').post body: {"user[name]" => data[:name], "user[password]" => data[:password]}
-        http.callback {
-          if http.response == "null"
-            $log.info("login failed 1"){data}
-            @user = nil
+        @user = nil
+        begin
+          Mysql.query("SELECT * FROM users WHERE name = '#{Mysql.escape data[:name]}' and password = '#{data[:password]}' limit 1").each{|row|@user = {id: row["id"], name: row["name"], nickname: row["nickname"], certified: true}} rescue nil
+          if @user
+            $log.info("login success 2"){data}
+            Users[@user[:id]] = Logged_Users[@user[:id]] = @user
+            Connections[@user[:id]] = conn
           else
-            @user = JSON.parse http.response rescue nil
-            if @user
-              $log.info("login success 2"){data}
-              @user = {id: @user["id"], name: @user["name"], nickname: @user["nickname"],certified: true}
-              Users[@user[:id]] = Logged_Users[@user[:id]] = @user
-              Connections[@user[:id]] = conn
-            else
-              $log.info("login failed 3"){data}
-            end
+            $log.info("login failed 3"){data}
           end
           send_object header: :login, data: @user
-        }
-        http.errback{
+        rescue
           http2 = EventMachine::HttpRequest.new("http://localhost:7922/?operation=passcheck&username=#{CGI.escape data[:name]}&pass=#{CGI.escape data[:password]}").get
           http2.callback {
             if http2.response == "true"
@@ -82,13 +75,12 @@ module MycardSever
               $log.info("login failed 5"){data}
               send_object header: :login, data: nil
             end
+            http2.errback {
+              $log.info("login failed 6"){data}
+              conn.close_connection
+            }
           }
-          http2.errback {
-            $log.info("login failed 6"){data}
-            #$log.error('error'){response_header+response}
-            conn.close_connection
-          }
-        }
+        end
       when :refresh
         return unless @user
         users = Logged_Users.values
