@@ -1,7 +1,6 @@
 #!/usr/bin/env ruby
 
 require 'eventmachine'
-require 'em-http'
 require 'mysql2'
 require 'json'
 require 'logger'
@@ -44,6 +43,7 @@ module MycardSever
     super rescue nil
   end
   def receive_object obj
+    p 0
     $log.debug obj
     begin
       data = obj[:data]
@@ -61,11 +61,17 @@ module MycardSever
           else
             $log.info("login failed 3"){data}
           end
+          p 1
           send_object header: :login, data: @user
         rescue
-          http2 = EventMachine::HttpRequest.new("http://localhost:7922/?operation=passcheck&username=#{CGI.escape data[:name]}&pass=#{CGI.escape data[:password]}").get
-          http2.callback {
-            if http2.response == "true"
+          http2 = EventMachine::Protocols::HttpClient.request(
+            :host => "localhost",
+            :port => "7922",
+            :request => "/",
+            :query_string => "operation=passcheck&username=#{CGI.escape data[:name]}&pass=#{CGI.escape data[:password]}"
+          )
+          http2.callback {|response|
+            if response[:content] == "true"
               $log.info("login success 4"){data}
               @user = {id: data[:name].to_sym, name: data[:name], nickname: data[:name]}
               Logged_Users[@user[:id]] = @user
@@ -198,11 +204,19 @@ end
 
 begin
   EventMachine::run {
-    EventMachine::start_server "0.0.0.0", 9998, MycardSever
+    EventMachine::start_server "0.0.0.0", $config["port"], MycardSever
     EM.add_periodic_timer(0.5) do
+      p Time.now
       $servers.each_with_index do |server, index|
-        http = EventMachine::HttpRequest.new("http://#{server[:ip]}:#{server[:http_port]}/?operation=getroomjson").get
-        http.callback {MycardSever.refresh(index, http.response)}
+        http = EventMachine::Protocols::HttpClient.request(
+          :host => server[:ip],
+          :port => server[:http_port],
+          :request => "/",
+          :query_string => "operation=getroomjson"
+        )
+        http.callback {|response|
+          MycardSever.refresh(index, response[:content])
+        }
         http.errback {MycardSever.refresh(index, "")}
       end
     end
