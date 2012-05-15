@@ -43,7 +43,6 @@ module MycardSever
     super rescue nil
   end
   def receive_object obj
-    p 0
     $log.debug obj
     begin
       data = obj[:data]
@@ -122,6 +121,7 @@ module MycardSever
   end
 
   def unbind
+p '-------unbind------'
     begin
       if @user
         $log.info "disconnect #{@user}"
@@ -139,6 +139,7 @@ module MycardSever
   end
   def self.refresh(server_index, reply)
     return if LastReply[server_index] == reply
+    p '---refres start---'
     LastReply[server_index].replace reply unless reply.nil?
     reply.replace reply.force_encoding("GBK").encode("UTF-8", :invalid => :replace, :undef => :replace)
     begin
@@ -161,13 +162,20 @@ module MycardSever
     (Rooms[server_index].values - rooms.values).each {|room|Rooms_Unparsed.delete room[:id]; boardcast header: :missingroom, data: room}
     Users[server_index].replace users
     Rooms[server_index].replace rooms
+    p '---refresh end---'
   end
   def self.parseroom(server_index, room)
     id = ('A'.ord+server_index).chr + room["roomid"]
     return Rooms[server_index][id] if Rooms_Unparsed[id] == room
     Rooms_Unparsed[id] = room
-    room["roomname"] =~ /^(P)?(M)?\#?(.*)\$?(.*)?$/
-    result = {id: id, name: $3, status: room["istart"].to_sym, pvp: !!$1, match: !!$2, password: !!$4, server_ip: $servers[server_index][:ip], server_port: $servers[server_index][:port]}
+    room["roomname"] =~ /^(P)?(M)?(T)?\#?(.*)$/
+    result = {id: id, name: $4, status: room["istart"].to_sym, pvp: !!$1, match: !!$2, tag: !!$3, private: room["needpass"] == "true", server_ip: $servers[server_index][:ip], server_port: $servers[server_index][:port]}
+    if result[:name] =~ /^(\d)(\d)(T|F)(T|F)(T|F)(\d+),(\d+),(\d+),(.*)$/
+      result[:ot] = $1.to_i
+      result[:match] = $2 == "1"
+      result[:tag] = $2 == "2"
+      result[:name] = $9
+    end
     room["users"].each do |user|
       pos = user["pos"].to_i
       user = parseuser(server_index, user)
@@ -206,7 +214,6 @@ begin
   EventMachine::run {
     EventMachine::start_server "0.0.0.0", $config["port"], MycardSever
     EM.add_periodic_timer(0.5) do
-      p Time.now
       $servers.each_with_index do |server, index|
         http = EventMachine::Protocols::HttpClient.request(
           :host => server[:ip],
