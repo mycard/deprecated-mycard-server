@@ -169,11 +169,12 @@ p '-------unbind------'
     return Rooms[server_index][id] if Rooms_Unparsed[id] == room
     Rooms_Unparsed[id] = room
     room["roomname"] =~ /^(P)?(M)?(T)?\#?(.*)$/
-    result = {id: id, name: $4, status: room["istart"].to_sym, pvp: !!$1, match: !!$2, tag: !!$3, private: room["needpass"] == "true", server_ip: $servers[server_index][:ip], server_port: $servers[server_index][:port]}
+    result = {id: id, name: $4, status: room["istart"].to_sym, pvp: !!$1, match: !!$2, tag: !!$3, lp:8000, private: room["needpass"] == "true", server_ip: $servers[server_index][:ip], server_port: $servers[server_index][:port]}
     if result[:name] =~ /^(\d)(\d)(T|F)(T|F)(T|F)(\d+),(\d+),(\d+),(.*)$/
       result[:ot] = $1.to_i
       result[:match] = $2 == "1"
       result[:tag] = $2 == "2"
+      result[:lp] = $6.to_i
       result[:name] = $9
     end
     room["users"].each do |user|
