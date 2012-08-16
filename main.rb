@@ -10,22 +10,23 @@ require 'yaml'
 
 Config = 'config.yml'
 Config.replace File.expand_path Config, File.dirname(__FILE__)
-$config  = YAML.load_file Config
-#open($config['api']) do |f|
-#$config['servers'] = JSON.parse f.read
-#  open(Config, 'w') { |conf| YAML.dump $config, conf }
-#end rescue puts $!
-
-$servers = $config["servers"].collect { |server| {id: server["id"], name: server["name"], ip: server["ip"], port: server["port"], http_port: server["http_port"], index: server['index'], max_rooms: server['max_rooms'], cache: []} }
+$config = YAML.load_file Config
+open($config['api']) do |f|
+  $config['servers'] = JSON.parse f.read
+  open(Config, 'w') { |conf| YAML.dump $config, conf }
+end rescue puts $!
+$config['servers'].each { |server| server.delete 'cache' }
+$servers = $config["servers"].collect { |server| {id: server["id"], name: server["name"], ip: server["ip"], port: server["port"], http_port: server["http_port"], index: server['index'], max_rooms: server['max_rooms'], cache: [], auth: server['auth'], error: 0} }
 puts YAML.dump $config
 
 Windows = RUBY_PLATFORM['ming'] || RUBY_PLATFORM['mswin']
 
 Mysql = (Windows ? Mysql2::Client : Mysql2::EM::Client).new(
-    host:     $config["db"]["host"],
-    username: $config["db"]["username"],
-    password: $config["db"]["password"],
-    database: $config["db"]["database"],
+    host:      $config["db"]["host"],
+    username:  $config["db"]["username"],
+    password:  $config["db"]["password"],
+    database:  $config["db"]["database"],
+    reconnect: true
 )
 if Windows
   def Mysql.result(sql, &block)
@@ -84,7 +85,7 @@ module MycardSever
           rooms += server[:cache]
         end
         send_object header: :rooms, data: rooms
-        send_object header: :servers, data: $servers
+        send_object header: :servers, data: $servers.select { |server| server.error < 5 }
       when :chat
         $log.info "chat #{@user}"
         data[:from] = @user
@@ -126,10 +127,20 @@ module MycardSever
 
   def self.refresh(server, reply)
     reply.force_encoding("GBK").encode!("UTF-8", :invalid => :replace, :undef => :replace)
-    reply = JSON.parse reply rescue {}
-    return unless reply["rooms"]
+    begin
+      reply          = JSON.parse reply
+      server[:error] = 0
+    rescue
+      server[:error] += 1
+      $log.warn("server_error_#{server[:name]}_#{server[:error]}") { reply }
+      if server[:error] >= 5
+        reply = {"rooms" => []}
+      else
+        return
+      end
+    end
     rooms         = reply["rooms"].collect { |room| parse_room(server, room) }
-    rooms_changed = rooms - server[:cache] + (server[:cache] - rooms).collect { |room| room[:_deleted] = true; room }
+    rooms_changed = rooms - server[:cache] + server[:cache].select { |room| (server[:cache].collect { |room| room[:id] } - rooms.collect { |room| room[:id] }).include? room[:id] }.collect { |room| room[:_deleted] = true; room }
     return if rooms_changed.empty?
     $log.info("rooms_update_#{server[:name]}") { rooms_changed }
     boardcast header: :rooms_update, data: rooms_changed
@@ -139,7 +150,7 @@ module MycardSever
   def self.parse_room(server, room)
     id = ('A'.ord+server[:id]).chr + room["roomid"]
     decode(room["roomname"]) =~ /^(P)?(M)?(T)?\#?(.*)$/
-    result = {id: id, name: $4, status: room["istart"].to_sym, pvp: !!$1, match: !!$2, tag: !!$3, lp: 8000, private: room["needpass"] == "true", server_id: server[:id], server_ip: server[:ip], server_port: server[:port]}
+    result = {id: id, name: $4, status: room["istart"].to_sym, pvp: !!$1, match: !!$2, tag: !!$3, lp: 8000, private: room["needpass"] == "true", server_id: server[:id], server_ip: server[:ip], server_port: server[:port], server_auth: server[:auth]}
     if result[:name] =~ /^(\d)(\d)(F)(F)(F)(\d+),(\d+),(\d+),(.*)$/
       result[:ot]    = $1.to_i
       result[:match] = $2 == "1"
