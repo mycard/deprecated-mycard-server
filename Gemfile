@@ -1,5 +1,5 @@
-source 'http://rubygems.org'
+source :rubygems
 gem 'eventmachine'
 gem 'em-http-request'
-gem 'mysql2'
+gem 'xmpp4r'
 gem 'daemons'

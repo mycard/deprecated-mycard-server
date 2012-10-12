@@ -1,198 +1,167 @@
 #!/usr/bin/env ruby
+Config = 'config.yml'
+Log = STDOUT
+Interval = 2
+
 require 'eventmachine'
 require 'em-http-request'
-require 'mysql2'
-require 'mysql2/em'
 require 'json'
 require 'logger'
-require 'open-uri'
+require 'xmpp4r'
+require 'xmpp4r/muc'
 require 'yaml'
+require 'daemons'
+require 'rexml/element'
 
-Config = 'config.yml'
-Config.replace File.expand_path Config, File.dirname(__FILE__)
-$config = YAML.load_file Config
-open($config['api']) do |f|
-  $config['servers'] = JSON.parse f.read
-  open(Config, 'w') { |conf| YAML.dump $config, conf }
-end rescue puts $!
-$config['servers'].each { |server| server.delete 'cache' }
-$servers = $config["servers"].collect { |server| {id: server["id"], name: server["name"], ip: server["ip"], port: server["port"], http_port: server["http_port"], index: server['index'], max_rooms: server['max_rooms'], cache: [], auth: server['auth'], error: 0} }
-puts YAML.dump $config
 
-Windows = RUBY_PLATFORM['ming'] || RUBY_PLATFORM['mswin']
-
-Mysql = (Windows ? Mysql2::Client : Mysql2::EM::Client).new(
-    host:      $config["db"]["host"],
-    username:  $config["db"]["username"],
-    password:  $config["db"]["password"],
-    database:  $config["db"]["database"],
-    reconnect: true
-)
-if Windows
-  def Mysql.result(sql, &block)
-    yield Mysql.query(sql)
-  end
-else
-  def Mysql.result(sql, &block)
-    Mysql.query(sql).callback &block
-  end
+def load_servers
+  http = EventMachine::HttpRequest.new($config['api']).get
+  http.callback {
+    $config['servers'] = JSON.parse http.response
+    $config['servers'].each {|server|
+      server['error_count'] = 0
+      server['rooms'] = []
+    }
+    open(Config, 'w') { |conf| YAML.dump $config, conf }
+  }
+  http.errback {
+    $log.warn('load servers') { http.error }
+  }
 end
 
-Logged_Users = {}
+def update(server, reply)
+  reply.force_encoding("GBK").encode!("UTF-8", :invalid => :replace, :undef => :replace)
+  begin
+    reply = JSON.parse reply
+    server['error_count'] = 0
+  rescue
+    server['error_count'] += 1
+    $log.warn("server_error_#{server[:name]}_#{server[:error]}") { reply }
+    if server['error_count'] >= 5
+      reply = {"rooms" => []}
+    else
+      return
+    end
+  end
+
+
+  rooms = reply["rooms"].collect { |room| parse_room(room) }
+  rooms_changed = rooms - server['rooms'] + server['rooms'].select { |room| (server['rooms'].collect { |room| room['id'] } - rooms.collect { |room| room['id'] }).include? room['id'] }.collect { |room| room['_deleted'] = true; room }
+  return if rooms_changed.empty?
+  server['rooms'].replace rooms
+
+  server = server.dup
+  server.delete 'rooms'
+  result = REXML::Element.new('server')
+  result.add_attributes server
+  rooms_changed.each { |room|
+    room = room.dup
+    users = room.delete 'users'
+    room_element = result.add_element('room')
+    room_element.add_attributes room
+    users.each { |user|
+      user_element = room_element.add_element('user')
+      user_element.add_attributes user
+    }
+  }
+
+  $xmpp_conference.send(Jabber::Message.new(nil, '喵'))
+
+  #puts result
+end
+
+def self.parse_room(room)
+  #struct HostInfo {
+  #  unsigned int lflist;
+  #  unsigned char rule;
+  #  unsigned char mode;
+  #  bool enable_priority;
+  #  bool no_check_deck;
+  #  bool no_shuffle_deck;
+  #  unsigned int start_lp;
+  #  unsigned char start_hand;
+  #  unsigned char draw_count;
+  #  unsigned short time_limit;
+  #};
+  decode(room["roomname"]) =~ /^(P)?(M)?(T)?\#?(.*)$/
+
+  room = {
+      'id' => room["roomid"].to_i,
+      'name' => $4,
+      'status' => room["istart"].to_sym,
+      'pvp' => !!$1,
+      'private' => room["needpass"] == "true",
+
+      'lflist' => 0,
+      'rule' => 0,
+      'mode' => $2 ? $3 ? 2 : 1 : 0,
+      'enable_priority' => false,
+      'no_check_deck' => false,
+      'no_shuffle_deck' => false,
+      'start_lp' => 8000,
+      'start_hand' => 5,
+      'draw_count' => 1,
+      'time_limit' => 0,
+
+      'users' => room["users"].collect{|user|parse_user(user)}
+  }
+
+  if room['name'] =~ /^(\d)(\d)(F)(F)(F)(\d+),(\d+),(\d+),(.*)$/
+    room['rule'] = $1.to_i
+    room['mode'] = $2.to_i
+    room['start_lp'] = $6.to_i
+    room['start_hand'] = $7.to_i
+    room['draw_count'] = $8.to_i
+    room['name'] = $9
+  end
+
+  room
+end
+
+def parse_user(user)
+  {'name' => decode(user['name']), 'certified' => user["id"]=="-1", 'pos' => user['pos'] % 2}
+end
+
+def decode(str)
+  [str].pack('H*').force_encoding("UTF-16BE").encode("UTF-8", :undef => :replace, :invalid => :replace)
+end
 
 
 Dir.chdir(File.dirname(__FILE__))
-$log = Logger.new(STDOUT)
-$log.info 'server started'
+$config = YAML.load_file Config
+$log = Logger.new Log
+puts YAML.dump $config
 
-module MycardSever
-  include EM::P::ObjectProtocol
-  Connections = {}
+$config['servers'].each {|server|
+  server['error_count'] = 0
+  server['rooms'] = []
+}
 
-  def post_init
-    'puts connect'
-  end
-
-  def receive_data data
-    super rescue nil
-  end
-
-  def receive_object obj
-    $log.debug obj
-    begin
-      data = obj[:data]
-      case obj[:header]
-      when :login
-        conn = self
-        $log.info "login #{data[:name]}"
-        Mysql.result("SELECT * FROM users WHERE name = '#{Mysql.escape data[:name]}' and password = '#{data[:password]}' limit 1") do |result|
-          @user = nil
-          result.each do |row|
-            @user = {id: row["id"], name: row["name"], nickname: row["nickname"], certified: true}
-          end
-          if @user
-            $log.info("login success 2") { data }
-            Logged_Users[@user[:id]] = @user
-            Connections[@user[:id]]  = conn
-          else
-            $log.info("login failed 3") { data }
-          end
-          send_object header: :login, data: @user
-        end
-      when :refresh
-        rooms = []
-        $servers.each do |server|
-          rooms += server[:cache]
-        end
-        send_object header: :rooms, data: rooms
-        send_object header: :servers, data: $servers.select { |server| server.error < 5 }
-      when :chat
-        $log.info "chat #{@user}"
-        data[:from] = @user
-        if data[:channel] == :lobby
-          Connections.each do |key, value|
-            next if key == @user[:id]
-            value.send_object header: :chat, data: data
-          end
-        else
-          channel        = data[:channel]
-          data[:channel] = @user[:id]
-          Connections[channel].send_object header: :chat, data: data if Connections[channel]
-        end
-      else
-        $log.info 'inavilid data: ' + obj.inspect
-      end
-    rescue Exception => exception
-      $log.info 'error: ' + obj.inspect + exception.inspect + exception.backtrace.inspect
-    end
-  end
-
-  def unbind
-    begin
-      if @user
-        $log.info "disconnect #{@user}"
-        Logged_Users.delete @user[:id]
-        Connections.delete @user[:id]
-      end
-    rescue Exception => exception
-      $log.info 'error: ' + exception.inspect + exception.inspect + exception.backtrace.inspect
-    end
-  end
-
-  def self.boardcast(obj)
-    Connections.each do |key, value|
-      value.send_object obj
-    end
-  end
-
-  def self.refresh(server, reply)
-    reply.force_encoding("GBK").encode!("UTF-8", :invalid => :replace, :undef => :replace)
-    begin
-      reply          = JSON.parse reply
-      server[:error] = 0
-    rescue
-      server[:error] += 1
-      $log.warn("server_error_#{server[:name]}_#{server[:error]}") { reply }
-      if server[:error] >= 5
-        reply = {"rooms" => []}
-      else
-        return
-      end
-    end
-    rooms         = reply["rooms"].collect { |room| parse_room(server, room) }
-    rooms_changed = rooms - server[:cache] + server[:cache].select { |room| (server[:cache].collect { |room| room[:id] } - rooms.collect { |room| room[:id] }).include? room[:id] }.collect { |room| room[:_deleted] = true; room }
-    return if rooms_changed.empty?
-    $log.info("rooms_update_#{server[:name]}") { rooms_changed }
-    boardcast header: :rooms_update, data: rooms_changed
-    server[:cache].replace rooms
-  end
-
-  def self.parse_room(server, room)
-    id = ('A'.ord+server[:id]).chr + room["roomid"]
-    decode(room["roomname"]) =~ /^(P)?(M)?(T)?\#?(.*)$/
-    result = {id: id, name: $4, status: room["istart"].to_sym, pvp: !!$1, match: !!$2, tag: !!$3, lp: 8000, private: room["needpass"] == "true", server_id: server[:id], server_ip: server[:ip], server_port: server[:port], server_auth: server[:auth]}
-    if result[:name] =~ /^(\d)(\d)(F)(F)(F)(\d+),(\d+),(\d+),(.*)$/
-      result[:ot]    = $1.to_i
-      result[:match] = $2 == "1"
-      result[:tag]   = $2 == "2"
-      result[:lp]    = $6.to_i
-      result[:name]  = $9
-    end
-    room["users"].each do |user|
-      case user["pos"].to_i
-      when 0, 16
-        result[:player1] = parse_user(user)
-      when 1, 17
-        result[:player2] = parse_user(user)
-      end
-    end
-    result
-  end
-
-  def self.parse_user(user)
-    name = decode(user["name"])
-    {id: name.to_sym, name: name, nickname: name, certified: user["id"]=="-1"}
-  end
-
-  def self.decode(str)
-    [str].pack('H*').force_encoding("UTF-16BE").encode("UTF-8", :undef => :replace, :invalid => :replace)
-  end
+$xmpp = Jabber::Client::new Jabber::JID.new $config['xmpp']['jid']
+port = $config['xmpp']['port'] || 5222
+if RUBY_PLATFORM['mingw'] || RUBY_PLATFORM['mswin']
+  $xmpp.use_ssl = true
+  $xmpp.allow_tls = false
+  port = $config['xmpp']['ssl_port'] || 5223
 end
+$xmpp.connect($config['xmpp']['host'] || $xmpp.jid.domain, port)
+$xmpp.auth($config['xmpp']['password'])
 
+$xmpp_conference = Jabber::MUC::MUCClient.new $xmpp
+$xmpp_conference.join $config['xmpp']['conference']
 
 begin
   EventMachine::run {
-    EventMachine::start_server "0.0.0.0", $config["port"], MycardSever
-    EM.add_periodic_timer(2) do
-      $servers.each_with_index do |server, index|
-        http = EM::HttpRequest.new(server[:index] + '?operation=getroomjsondelphi').get
-        http.callback {
-          MycardSever.refresh(server, http.response)
-        }
-      end
-    end
+    load_servers
+    EM.add_periodic_timer(Interval) {
+      $config['servers'].each_with_index { |server|
+        http = EM::HttpRequest.new(server['index'] + '?operation=getroomjsondelphi').get
+        http.callback { update(server, http.response) }
+        http.errback { server['error_count'] += 1 }
+      }
+    }
   }
 rescue
-  $log.error 'error: ' + $!.inspect + $!.backtrace.inspect
+  $log.fatal 'error: ' + $!.inspect + $!.backtrace.inspect
   retry
 end
