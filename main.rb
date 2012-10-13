@@ -52,12 +52,12 @@ def update(server, reply)
 
   server = server.dup
   server.delete 'rooms'
-  result = REXML::Element.new('server')
-  result.add_attributes server
+  server_element = REXML::Element.new('server')
+  server_element.add_attributes server
   rooms_changed.each { |room|
     room = room.dup
     users = room.delete 'users'
-    room_element = result.add_element('room')
+    room_element = server_element.add_element('room')
     room_element.add_attributes room
     users.each { |user|
       user_element = room_element.add_element('user')
@@ -65,9 +65,11 @@ def update(server, reply)
     }
   }
 
-  $xmpp_conference.send(Jabber::Message.new(nil, '喵'))
+  p = Jabber::Message.new
+  p.add_element(server_element)
+  $xmpp_conference.send(p)
 
-  #puts result
+  puts server_element
 end
 
 def self.parse_room(room)
@@ -136,7 +138,7 @@ $config['servers'].each {|server|
   server['error_count'] = 0
   server['rooms'] = []
 }
-
+#Jabber.debug = true
 $xmpp = Jabber::Client::new Jabber::JID.new $config['xmpp']['jid']
 port = $config['xmpp']['port'] || 5222
 if RUBY_PLATFORM['mingw'] || RUBY_PLATFORM['mswin']
