@@ -1,8 +1,4 @@
 #!/usr/bin/env ruby
-Config = 'config.yml'
-Log = STDOUT
-Interval = 2
-
 require 'eventmachine'
 require 'em-http-request'
 require 'json'
@@ -13,6 +9,10 @@ require 'yaml'
 require 'daemons'
 require 'rexml/element'
 
+Config = 'config.yml'
+Log = STDOUT
+Interval = 2
+Jabber.debug = false
 
 def load_servers
   http = EventMachine::HttpRequest.new($config['api']).get
@@ -36,7 +36,7 @@ def update(server, reply)
     server['error_count'] = 0
   rescue
     server['error_count'] += 1
-    $log.warn("server_error_#{server[:name]}_#{server[:error]}") { reply }
+    $log.warn("server_error_#{server['name']}_#{server['error_count']}") { reply }
     if server['error_count'] >= 5
       reply = {"rooms" => []}
     else
@@ -65,11 +65,10 @@ def update(server, reply)
     }
   }
 
-  p = Jabber::Message.new
-  p.add_element(server_element)
-  $xmpp_conference.send(p)
+  message = Jabber::Message.new
+  message.add_element(server_element)
+  $xmpp_conference.send(message)
 
-  puts server_element
 end
 
 def self.parse_room(room)
@@ -138,7 +137,7 @@ $config['servers'].each {|server|
   server['error_count'] = 0
   server['rooms'] = []
 }
-#Jabber.debug = true
+
 $xmpp = Jabber::Client::new Jabber::JID.new $config['xmpp']['jid']
 port = $config['xmpp']['port'] || 5222
 if RUBY_PLATFORM['mingw'] || RUBY_PLATFORM['mswin']
