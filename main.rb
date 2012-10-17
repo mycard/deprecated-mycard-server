@@ -12,7 +12,7 @@ require 'rexml/element'
 Config = 'config.yml'
 Log = STDOUT
 Interval = 2
-Jabber.debug = false
+Jabber.debug = true
 
 def load_servers
   http = EventMachine::HttpRequest.new($config['api']).get
@@ -50,11 +50,17 @@ def update(server, reply)
   return if rooms_changed.empty?
   server['rooms'].replace rooms
 
+  message = Jabber::Presence.new
+  message.add_element(server_to_xml(server, rooms_changed))
+  $xmpp_conference.send(message)#, 'mycard')
+
+end
+def server_to_xml(server, rooms)
   server = server.dup
   server.delete 'rooms'
   server_element = REXML::Element.new('server')
   server_element.add_attributes server
-  rooms_changed.each { |room|
+  rooms.each { |room|
     room = room.dup
     users = room.delete 'users'
     room_element = server_element.add_element('room')
@@ -64,14 +70,9 @@ def update(server, reply)
       user_element.add_attributes user
     }
   }
-
-  message = Jabber::Message.new
-  message.add_element(server_element)
-  $xmpp_conference.send(message)
-
+  server_element
 end
-
-def self.parse_room(room)
+def parse_room(room)
   #struct HostInfo {
   #  unsigned int lflist;
   #  unsigned char rule;
@@ -124,7 +125,8 @@ def parse_user(user)
 end
 
 def decode(str)
-  [str].pack('H*').force_encoding("UTF-16BE").encode("UTF-8", :undef => :replace, :invalid => :replace)
+  result = [str].pack('H*').force_encoding("UTF-16BE").encode("UTF-8", :undef => :replace, :invalid => :replace)
+  result.chomp("\u0000")
 end
 
 
@@ -150,7 +152,13 @@ $xmpp.auth($config['xmpp']['password'])
 
 $xmpp_conference = Jabber::MUC::MUCClient.new $xmpp
 $xmpp_conference.join $config['xmpp']['conference']
-
+$xmpp_conference.add_join_callback { |presence|
+  message = Jabber::Message.new
+  $config['servers'].each {|server| 
+  	  message.add_element(server_to_xml(server, server['rooms'])) 
+  }
+  $xmpp_conference.send(message, presence.from.resource)
+}
 begin
   EventMachine::run {
     load_servers
