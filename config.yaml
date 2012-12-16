@@ -1,0 +1,8 @@
+default:
+  port: 9998
+  servers: 'http://my-card.in/servers.json?server_type=ygopro'
+  db: 
+    host: mycard-server.my-card.in
+    username: zh99998
+    password: 66rpg2011
+    database: mycard_production
