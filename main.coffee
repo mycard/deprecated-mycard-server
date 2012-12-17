@@ -8,7 +8,7 @@ WebSocketServer = require('websocket').server
 http = require 'http'
 
 Iconv = require('iconv').Iconv
-gbk_to_utf8 = new Iconv 'GBK', 'UTF-8'
+gbk_to_utf8 = new Iconv 'GBK', 'UTF-8//TRANSLIT//IGNORE'
 
 settings = config.readConfig process.cwd() + '/' + "config.yaml"
 console.log settings
@@ -46,7 +46,7 @@ request settings.servers, (error, response, body)->
     connection = request.accept(null, request.origin)
     index = clients.push(connection)
     console.log((new Date()) + ' Connection accepted.')
-    connection.sendUTF JSON.stringify [].concat (s.rooms for s in servers)
+    connection.sendUTF JSON.stringify _.flatten _.pluck(servers, 'rooms'), true
 
     connection.on 'close', (reasonCode, description)->
       console.log((new Date()) + ' Peer ' + connection.remoteAddress + ' disconnected.')
@@ -59,7 +59,8 @@ request settings.servers, (error, response, body)->
           refresh(server, JSON.parse gbk_to_utf8.convert(new Buffer(body, 'binary')).toString())
         catch e
           server.error_count++
-          console.log e #, body
+          #console.log gbk_to_utf8.convert(new Buffer(body, 'binary')).toString()
+          console.log e.stack #, body
 
   send = (data)->
     data = JSON.stringify data
@@ -92,8 +93,10 @@ request settings.servers, (error, response, body)->
     id: String.fromCharCode('A'.charCodeAt() + server.id) + data.roomid,
     name: matched[4],
     status: data.istart
-    pvp: matched[1]?
-    private: data.needpass == "true",
+    server_id: server.id
+
+    #pvp: matched[1]?
+    #private: data.needpass == "true",
 
     #lflist: 0,
     #rule: 0,
@@ -108,6 +111,9 @@ request settings.servers, (error, response, body)->
 
     users: (parse_user(server, user) for user in data.users)
     }
+
+    result.pvp = true if matched[1]
+    result.private = true if data.needpass == "true"
 
     if matched[2]
       result.mode = 1
