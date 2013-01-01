@@ -1,0 +1,31 @@
+{
+    "name": "mycard-server",
+    "version": "2.0.1",
+    "description": "a high performance server to list rooms for ygoserver",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/zh99998/mycard-server.git"
+    },
+    "keywords": [
+        "mycard",
+        "ygopro",
+        "server"
+    ],
+    "author": "zh99998 <zh99998@gmail.com>",
+    "dependencies": {
+        "underscore": "*",
+        "request": "*",
+        "websocket": "*",
+        "iconv": "*",
+        "yaml-config": "*"
+    },
+    "license": "GPLv3",
+    "main": "mycard-server.js",
+    "scripts": {
+        "start": "forever start mycard-server.js",
+        "build": "coffee -c mycard-server.coffee"
+    },
+    "engines": {
+        "node": "*"
+    }
+}
