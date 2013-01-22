@@ -2,8 +2,6 @@ mycard-server
 =============
 a high performance server to list rooms for ygoserver
 
-run this under forever https://github.com/nodejitsu/forever
-
 ## Installation
 
 ``` bash
