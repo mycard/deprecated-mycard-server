@@ -14,5 +14,5 @@ run this under forever https://github.com/nodejitsu/forever
 
 ## Usage
 ``` bash
-forever start mycard-server.js
+ $ forever start mycard-server.js
 ```
