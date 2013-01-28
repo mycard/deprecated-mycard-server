@@ -17,7 +17,7 @@ request settings.servers, (error, response, body)->
 
   for s in servers
     s.rooms = []
-    s.error_count
+    s.error_count = 0
 
   clients = []
 
@@ -44,13 +44,14 @@ request settings.servers, (error, response, body)->
       return
 
     connection = request.accept(null, request.origin)
-    index = clients.push(connection)
+    clients.push(connection)
     console.log((new Date()) + ' Connection accepted.')
     connection.sendUTF JSON.stringify _.flatten _.pluck(servers, 'rooms'), true
 
     connection.on 'close', (reasonCode, description)->
       console.log((new Date()) + ' Peer ' + connection.remoteAddress + ' disconnected.')
-      clients.splice(index, 1)
+      index = clients.indexOf(connection)
+      clients.splice(index, 1) unless index == -1
 
   main = (servers)->
     _.each servers, (server)->
