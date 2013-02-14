@@ -23,8 +23,8 @@ request settings.servers, (error, response, body)->
 
   server = http.createServer (request, response)->
     console.log((new Date()) + ' Received request for ' + request.url)
-    response.writeHead(404)
-    response.end()
+    response.writeHead(200, {'Content-Type': 'application/json'});
+    response.end(JSON.stringify(_.flatten(_.pluck(servers, 'rooms'))), 'utf8')
 
   server.listen settings.port, ->
     console.log('Server is listening on port ' + settings.port)
