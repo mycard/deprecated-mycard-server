@@ -133,13 +133,29 @@ request settings.servers, (error, response, body)->
       result.draw_count = parseInt matched[8]
 
     result
+  
+  #define PLAYERCHANGE_OBSERVE 0x8
+  #define PLAYERCHANGE_READY 0x9
+  #define PLAYERCHANGE_NOTREADY 0xa
+  #define PLAYERCHANGE_LEAVE 0xb
+  
+  #define NETPLAYER_TYPE_PLAYER1 0
+  #define NETPLAYER_TYPE_PLAYER2 1
+  #define NETPLAYER_TYPE_PLAYER3 2
+  #define NETPLAYER_TYPE_PLAYER4 3
+  #define NETPLAYER_TYPE_PLAYER5 4
+  #define NETPLAYER_TYPE_PLAYER6 5
+  #define NETPLAYER_TYPE_OBSERVER 7
+    
+  #pos<<4 | state
+  
   parse_user = (server, data)->
     {
     id: data.name,
     name: data.name,
     #nickname: data.name,
     certified: data.id == "-1",
-    player: data.pos
+    player: data.pos & 0xf 
     }
 
   main servers
