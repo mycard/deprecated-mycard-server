@@ -110,9 +110,15 @@ request settings.servers, (error, response, body)->
     #draw_count: => 1,
     #time_limit: => 0,
 
-    users: (parse_user(server, user) for user in data.users)
+    users: []
     }
-
+    for user_data in data.users
+      user = parse_user(server, user_data)
+      if user.player == 7 or _.some result.users (existed_user)->
+          existed_user.player == user.player
+        result.users.push user
+        
+push()
     result.pvp = true if matched[1]
     result.private = true if data.needpass == "true"
 
