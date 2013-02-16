@@ -60,8 +60,8 @@ request settings.servers, (error, response, body)->
           refresh(server, JSON.parse gbk_to_utf8.convert(new Buffer(body, 'binary')).toString())
         catch e
           server.error_count++
-          #console.log gbk_to_utf8.convert(new Buffer(body, 'binary')).toString()
-          console.log e.stack #, body
+          console.log (new Buffer(body, 'binary')).toString()
+          console.log e.stack, error, response
 
   send = (data)->
     data = JSON.stringify data
@@ -138,7 +138,8 @@ request settings.servers, (error, response, body)->
     id: data.name,
     name: data.name,
     #nickname: data.name,
-    certified: data.id == "-1"
+    certified: data.id == "-1",
+    player: data.pos
     }
 
   main servers
