@@ -60,8 +60,7 @@ request settings.servers, (error, response, body)->
           refresh(server, JSON.parse gbk_to_utf8.convert(new Buffer(body, 'binary')).toString())
         catch e
           server.error_count++
-          console.log (new Buffer(body, 'binary')).toString()
-          console.log e.stack, error, response
+          console.log e.stack, error, response, body
 
   send = (data)->
     data = JSON.stringify data
