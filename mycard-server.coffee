@@ -57,6 +57,7 @@ request settings.servers, (error, response, body)->
     _.each servers, (server)->
       if server.requesting
         console.log server.name + ' still requesting'
+      else
         server.requesting = true
         request {url: server.index + '/?operation=getroomjson', encoding: 'binary'}, (error, response, body)->
           server.requesting = false
