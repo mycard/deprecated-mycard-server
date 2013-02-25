@@ -58,9 +58,9 @@ request settings.servers, (error, response, body)->
       if server.requesting
         console.log server.name + ' still requesting'
       else
-        server.requesting = true
-        request {url: server.index + '/?operation=getroomjson', encoding: 'binary'}, (error, response, body)->
-          server.requesting = false
+        #server.requesting = true
+        request {url: server.index + '/?operation=getroomjson', timeout: inteval * 1000, encoding: 'binary'}, (error, response, body)->
+          #server.requesting = false
           try
             refresh(server, JSON.parse gbk_to_utf8.convert(new Buffer(body, 'binary')).toString())
           catch e
