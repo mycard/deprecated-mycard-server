@@ -18,7 +18,7 @@ request settings.servers, (error, response, body)->
   for s in servers
     s.rooms = []
     s.error_count = 0
-
+    s.requesting = false
   clients = []
 
   server = http.createServer (request, response)->
@@ -55,12 +55,16 @@ request settings.servers, (error, response, body)->
 
   main = (servers)->
     _.each servers, (server)->
-      request {url: server.index + '/?operation=getroomjson', encoding: 'binary'}, (error, response, body)->
-        try
-          refresh(server, JSON.parse gbk_to_utf8.convert(new Buffer(body, 'binary')).toString())
-        catch e
-          server.error_count++
-          console.log e.stack, error, response, body
+      if server.requesting
+        console.log server.name + ' still requesting'
+        server.requesting = true
+        request {url: server.index + '/?operation=getroomjson', encoding: 'binary'}, (error, response, body)->
+          server.requesting = false
+          try
+            refresh(server, JSON.parse gbk_to_utf8.convert(new Buffer(body, 'binary')).toString())
+          catch e
+            server.error_count++
+            console.log e.stack, error, response, body
 
   send = (data)->
     data = JSON.stringify data
