@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-inteval = 5
+inteval = 2000
 
 _ = require 'underscore'
 config = require 'yaml-config'
@@ -59,7 +59,7 @@ request settings.servers, (error, response, body)->
       #  console.log server.name + ' still requesting'
       #else
         #server.requesting = true
-      request {url: server.index + '/?operation=getroomjson', timeout: inteval * 1000, encoding: 'binary'}, (error, response, body)->
+      request {url: server.index + '/?operation=getroomjson', timeout: inteval, encoding: 'binary'}, (error, response, body)->
         #server.requesting = false
         if error
           console.log error
@@ -165,5 +165,5 @@ request settings.servers, (error, response, body)->
   main servers
   setInterval ->
     main servers
-  , inteval * 1000
+  , inteval
 
