@@ -5,8 +5,8 @@ a high performance server to list rooms for ygoserver
 ## Installation
 
 ``` bash
- $ [sudo] npm install -g coffee-script forever
  $ npm install
+ $ [sudo] npm install -g coffee-script forever
  $ coffee -c mycard-server.coffee
 ```
 
