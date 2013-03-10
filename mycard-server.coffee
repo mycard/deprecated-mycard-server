@@ -76,7 +76,7 @@ request settings.servers, (error, response, body)->
     if rooms_changed.length
       send rooms_changed
       server.rooms = rooms
-    console.log server.name, rooms_changed.length                                                                                                   1
+    console.log server.name, rooms_changed.length
 
   parse_room = (server, data)->
     #struct HostInfo {
