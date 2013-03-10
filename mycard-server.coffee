@@ -52,8 +52,6 @@ request settings.servers, (error, response, body)->
 
   main = (servers)->
     _.each servers, (server)->
-      request {url: server.index + '/?operation=getroomjson', }, (error, response, body)->
-    try
       request {url: server.index + '/?operation=getroomjson', timeout: inteval, encoding: (if server.encoding == 'GBK' then 'binary' else 'utf8'), json: server.encoding != 'GBK'}, (error, response, body)->
         if error
           console.log error
