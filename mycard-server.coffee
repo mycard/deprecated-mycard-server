@@ -57,10 +57,8 @@ request settings.servers, (error, response, body)->
           console.log error
         else
           try
-            if server.encoding == 'GBK'
-              refresh(server, JSON.parse gbk_to_utf8.convert(new Buffer(body, 'binary')).toString())
-            else
-              refresh(server, body)
+            body = JSON.parse gbk_to_utf8.convert(new Buffer(body, 'binary')).toString() if server.encoding == 'GBK'
+            refresh(server, body)
           catch e
             console.log e.stack, error, response, body
 
