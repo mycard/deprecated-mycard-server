@@ -17,8 +17,6 @@ request settings.servers, (error, response, body)->
 
   for s in servers
     s.rooms = []
-    #s.error_count = 0
-    #s.requesting = false
   clients = []
 
   server = http.createServer (request, response)->
@@ -29,10 +27,9 @@ request settings.servers, (error, response, body)->
   server.listen settings.port, ->
     console.log('Server is listening on port ' + settings.port)
 
-  wsServer = new WebSocketServer({
-  httpServer: server,
-  autoAcceptConnections: false
-  })
+  wsServer = new WebSocketServer
+    httpServer: server
+    autoAcceptConnections: false
 
   originIsAllowed = (origin)->
     return true
@@ -49,25 +46,24 @@ request settings.servers, (error, response, body)->
     connection.sendUTF JSON.stringify _.flatten _.pluck(servers, 'rooms'), true
 
     connection.on 'close', (reasonCode, description)->
-      console.log((new Date()) + ' Peer ' + connection.remoteAddress + ' disconnected.')
+      console.log("#{new Date()} Peer #{connection.remoteAddress} disconnected: #{description}")
       index = clients.indexOf(connection)
       clients.splice(index, 1) unless index == -1
 
   main = (servers)->
     _.each servers, (server)->
-      #if server.requesting
-      #  console.log server.name + ' still requesting'
-      #else
-        #server.requesting = true
-      request {url: server.index + '/?operation=getroomjson', timeout: inteval, encoding: 'binary'}, (error, response, body)->
-        #server.requesting = false
+      request {url: server.index + '/?operation=getroomjson', }, (error, response, body)->
+    try
+      request {url: server.index + '/?operation=getroomjson', timeout: inteval, encoding: (if server.encoding == 'GBK' then 'binary' else 'utf8'), json: server.encoding != 'GBK'}, (error, response, body)->
         if error
           console.log error
         else
           try
-            refresh(server, JSON.parse gbk_to_utf8.convert(new Buffer(body, 'binary')).toString())
+            if server.encoding == 'GBK'
+              refresh(server, JSON.parse gbk_to_utf8.convert(new Buffer(body, 'binary')).toString())
+            else
+              refresh(body)
           catch e
-            #server.error_count++
             console.log e.stack, error, response, body
 
   send = (data)->
@@ -77,7 +73,9 @@ request settings.servers, (error, response, body)->
 
   refresh = (server, data)->
     rooms = (parse_room(server, room) for room in data.rooms)
-    rooms_changed = (room for room in rooms when !_.isEqual room, _.find server.rooms, (r)->r.id == room.id).concat ((room._deleted = true; room) for room in server.rooms when _.all rooms, (r)->(r.id != room.id))
+    rooms_changed = (room for room in rooms when !_.isEqual room, _.find server.rooms, (r)->
+      r.id == room.id).concat ((room._deleted = true; room) for room in server.rooms when _.all rooms, (r)->
+      (r.id != room.id))
     if rooms_changed.length
       send rooms_changed
       server.rooms = rooms
@@ -121,7 +119,8 @@ request settings.servers, (error, response, body)->
     }
     for user_data in data.users
       user = parse_user(server, user_data)
-      if (user.player == 7) or !_.some(result.users, (existed_user) -> existed_user.player == user.player)
+      if (user.player == 7) or !_.some(result.users, (existed_user) ->
+        existed_user.player == user.player)
         result.users.push user
 
     result.pvp = true if matched[1]
@@ -152,14 +151,14 @@ request settings.servers, (error, response, body)->
   #define NETPLAYER_TYPE_PLAYER5 4
   #define NETPLAYER_TYPE_PLAYER6 5
   #define NETPLAYER_TYPE_OBSERVER 7
-  
+
   parse_user = (server, data)->
     {
     id: data.name,
     name: data.name,
     #nickname: data.name,
     certified: data.id == "-1",
-    player: data.pos & 0xf 
+    player: data.pos & 0xf
     }
 
   main servers
