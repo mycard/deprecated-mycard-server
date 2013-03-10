@@ -60,7 +60,7 @@ request settings.servers, (error, response, body)->
             if server.encoding == 'GBK'
               refresh(server, JSON.parse gbk_to_utf8.convert(new Buffer(body, 'binary')).toString())
             else
-              refresh(body)
+              refresh(server, body)
           catch e
             console.log e.stack, error, response, body
 
@@ -72,12 +72,11 @@ request settings.servers, (error, response, body)->
   refresh = (server, data)->
     rooms = (parse_room(server, room) for room in data.rooms)
     rooms_changed = (room for room in rooms when !_.isEqual room, _.find server.rooms, (r)->
-      r.id == room.id).concat ((room._deleted = true; room) for room in server.rooms when _.all rooms, (r)->
-      (r.id != room.id))
+      r.id == room.id).concat ((room._deleted = true; room) for room in server.rooms when _.all rooms, (r)->(r.id != room.id))
     if rooms_changed.length
       send rooms_changed
       server.rooms = rooms
-    console.log server.name, rooms_changed.length
+    console.log server.name, rooms_changed.length                                                                                                   1
 
   parse_room = (server, data)->
     #struct HostInfo {
@@ -122,7 +121,7 @@ request settings.servers, (error, response, body)->
         result.users.push user
 
     result.pvp = true if matched[1]
-    result.private = true if data.needpass == "true"
+    result['private'] = true if data.needpass == "true"
 
     if matched[2]
       result.mode = 1
