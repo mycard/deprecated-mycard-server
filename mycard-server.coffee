@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 inteval = 2000
+blocked_room_name = /((?=.+?[群号战队收人纳招募].+?)(.*?[群号战队收人纳招募]*?.*?[⒈⒉⒊⒋⒌⒍⒎⒏⒐⑴⑵⑶⑷⑸⑹⑺⑻⑼①②③④⑤⑥⑦⑧⑨㈠㈡㈢㈣㈤㈥㈦㈧㈨一二三四五六七八九零壹贰叁肆伍陆柒捌玖〇\d].*?[群号战队收人纳招募]*?.*?){8,})|(?!(([群号战队收人纳招募]).*?\4))([群号战队收人纳招募].*?[群号战队收人纳招募])/
 
 _ = require 'underscore'
 config = require 'yaml-config'
@@ -64,7 +65,16 @@ send = (data)->
     client.sendUTF data
 
 refresh = (server, data)->
-  rooms = (parse_room(server, room) for room in data.rooms)
+  rooms = (parse_room(server, room) for room in data.rooms )
+  rooms = _.reject rooms, (room)->
+    if room.name.match blocked_room_name
+      console.log "blocked: #{room.name}"
+      return true
+    for user in room.users
+      if user.name.match blocked_room_name
+        console.log "blocked: #{room.name} because user #{user.name}"
+        return true
+    false
   rooms_changed = (room for room in rooms when !_.isEqual room, _.find server.rooms, (r)->
     r.id == room.id).concat ((room._deleted = true; room) for room in server.rooms when _.all rooms, (r)->
     (r.id != room.id))

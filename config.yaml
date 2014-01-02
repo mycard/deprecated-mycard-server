@@ -1,3 +1,3 @@
 default:
   port: 9998
-  servers: 'http://my-card.in/servers.json?server_type=ygopro'
+  servers: 'https://my-card.in/servers.json?server_type=ygopro3'
