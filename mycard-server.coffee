@@ -7,6 +7,7 @@ config = require 'yaml-config'
 request = require 'request'
 WebSocketServer = require('websocket').server
 http = require 'http'
+fs = require 'fs'
 
 Iconv = require('iconv').Iconv
 gbk_to_utf8 = new Iconv 'GBK', 'UTF-8//TRANSLIT//IGNORE'
@@ -21,8 +22,9 @@ server = http.createServer (request, response)->
   response.writeHead(200, {'Content-Type': 'application/json'});
   response.end(JSON.stringify(_.flatten(_.pluck(settings.servers, 'rooms'))), 'utf8')
 
-server.listen settings.port, ->
-  console.log('Server is listening on port ' + settings.port)
+fs.unlink settings.listen, (err)->
+  server.listen settings.listen, ->
+    console.log('Server is listening on ' + settings.listen)
 
 wsServer = new WebSocketServer
   httpServer: server
