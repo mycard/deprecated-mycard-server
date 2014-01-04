@@ -23,6 +23,7 @@ server = http.createServer (request, response)->
   response.end(JSON.stringify(_.flatten(_.pluck(settings.servers, 'rooms'))), 'utf8')
 
 fs.unlink settings.listen, (err)->
+  process.umask(0);
   server.listen settings.listen, ->
     console.log('Server is listening on ' + settings.listen)
 
