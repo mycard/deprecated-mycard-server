@@ -7,6 +7,7 @@ config = require 'yaml-config'
 request = require 'request'
 WebSocketServer = require('websocket').server
 http = require 'http'
+https = require 'https'
 fs = require 'fs'
 
 Iconv = require('iconv').Iconv
@@ -20,9 +21,9 @@ clients = []
 server = http.createServer (request, response)->
   response.writeHead(200, {'Content-Type': 'application/json'});
   response.end(JSON.stringify(_.flatten(_.pluck(settings.servers, 'rooms'))), 'utf8')
-server_secure = http.createServer
-  key: fs.readFileSync(settings.ssl_certificate_key)
-  cert: fs.readFileSync(settings.ssl_certificate)
+server_secure = https.createServer
+    key: fs.readFileSync(settings.ssl_certificate_key)
+    cert: fs.readFileSync(settings.ssl_certificate)
   , (request, response)->
     response.writeHead(200, {'Content-Type': 'application/json'});
     response.end(JSON.stringify(_.flatten(_.pluck(settings.servers, 'rooms'))), 'utf8')
