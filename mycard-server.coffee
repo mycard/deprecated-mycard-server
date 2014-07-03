@@ -18,23 +18,27 @@ console.log settings
 clients = []
 
 server = http.createServer (request, response)->
-  console.log((new Date()) + ' Received request for ' + request.url)
   response.writeHead(200, {'Content-Type': 'application/json'});
   response.end(JSON.stringify(_.flatten(_.pluck(settings.servers, 'rooms'))), 'utf8')
+server_secure = http.createServer
+  key: fs.readFileSync(settings.ssl_certificate_key)
+  cert: fs.readFileSync(settings.ssl_certificate)
+  , (request, response)->
+    response.writeHead(200, {'Content-Type': 'application/json'});
+    response.end(JSON.stringify(_.flatten(_.pluck(settings.servers, 'rooms'))), 'utf8')
+
 
 fs.unlink settings.listen, (err)->
   process.umask(0);
   server.listen settings.listen, ->
     console.log('Server is listening on ' + settings.listen)
-
-wsServer = new WebSocketServer
-  httpServer: server
-  autoAcceptConnections: false
+server_secure.listen settings.listen_secure, ->
+  console.log('Server is listening on ' + settings.listen_secure)
 
 originIsAllowed = (origin)->
   return true
 
-wsServer.on 'request', (request)->
+handle = (request)->
   if (!originIsAllowed(request.origin))
     request.reject()
     console.log((new Date()) + ' Connection from origin ' + request.origin + ' rejected.')
@@ -49,6 +53,16 @@ wsServer.on 'request', (request)->
     console.log("#{new Date()} Peer #{connection.remoteAddress} disconnected: #{description}")
     index = clients.indexOf(connection)
     clients.splice(index, 1) unless index == -1
+
+new WebSocketServer(
+  httpServer: server
+  autoAcceptConnections: false
+).on 'request', handle
+
+new WebSocketServer(
+  httpServer: server_secure
+  autoAcceptConnections: false
+).on 'request', handle
 
 main = (servers)->
   _.each servers, (server)->
